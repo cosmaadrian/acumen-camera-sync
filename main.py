@@ -5,8 +5,11 @@ import tkinter
 import cv2
 import numpy as np
 import time
+import sys
 import multiprocessing
 
+if len(sys.argv) > 1:
+    config.RECORD_PATH = sys.argv[1]
 
 class App():
     def __init__(self, window, window_title, cameras):
@@ -67,6 +70,10 @@ class App():
                 camera.stop_record()
 
             self.save_event.clear()
+
+            with open('captured_videos.txt', 'at') as f:
+                for camera in self.cameras:
+                    f.write(f'{camera.last_video}\n')
 
         else:
             if self.subject_id.get().strip() == '':

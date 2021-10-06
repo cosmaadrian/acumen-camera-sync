@@ -23,13 +23,12 @@ class BufferLessCamGear(object):
     def _reader(self):
         while True:
             frame = self.cap.read()
-            # ret, frame = self.cap.read()
             if frame is None:
                 continue
 
             if not self.q.empty():
                 try:
-                    self.q.get_nowait()   # discard previous (unprocessed) frame
+                    self.q.get_nowait()
                 except queue.Empty:
                     pass
             self.q.put(frame)
@@ -41,7 +40,7 @@ class BufferLessCamGear(object):
         self.cap.stop()
 
 class FrameGrabber(Process):
-    def __init__(self, camera, save_event, frame_buffer, message_queue):
+    def __init__(self, camera, save_event, frame_buffer, message_queue, output_queue):
         super(FrameGrabber, self).__init__()
         self.camera = camera
 
@@ -51,6 +50,9 @@ class FrameGrabber(Process):
 
         self.frame_buffer = frame_buffer
         self.message_queue = message_queue
+        self.output_queue = output_queue
+
+        self._last_video = ''
 
         self.video_out = None
         self.stream_quality = config.RECORD_QUALITY
@@ -64,8 +66,6 @@ class FrameGrabber(Process):
 
     def run(self):
         viz_gear = BufferLessCamGear(self.stream_url(kind = 'viz'))
-        # save_gear = CamGear(source = self.stream_url(kind = 'save'), CAP_PROP_BUFFERSIZE=1).start()
-        # viz_gear = CamGear(source = self.stream_url(kind = 'viz'), CAP_PROP_BUFFERSIZE=1).start()
 
         while True:
 
@@ -89,10 +89,9 @@ class FrameGrabber(Process):
                 continue
 
             start_time = time.time()
-            if not self.do_save or True:
+            if not self.do_save:
                 self.frame_buffer[:] = frame.ravel()
             end_time = time.time()
-            # print("put frame into buffer", end_time - start_time)
 
             if self.do_save:
                 self.video_out.write(hq_frame)
@@ -110,7 +109,8 @@ class FrameGrabber(Process):
     def start_record(self, options = None):
         print(self.camera.name, "STARTING RECORDING")
         if options is not None:
-            self.recording_path = os.path.join(config.RECORD_PATH, options['subject_id'], self.camera.name)
+            subject_id = options['subject_id'].strip().replace(' ', '-').lower()
+            self.recording_path = os.path.join(config.RECORD_PATH, subject_id, self.camera.name)
         else:
             self.recording_path = os.path.join(config.RECORD_PATH)
 
@@ -121,10 +121,10 @@ class FrameGrabber(Process):
         else:
             variation = options['variation'].lower().strip()
 
-        output_path = os.path.join(self.recording_path, variation + '-' + str(time.time())[-6:] + '.mp4')
+        output_path = os.path.join(self.recording_path, variation + '-' + str(time.time()).replace('.', '-') + '.mp4')
+        self.output_queue.put(('last_video', output_path))
         self.save_gear = CamGear(self.stream_url(kind = 'save')).start()
-        # self.save_gear = BufferLessCamGear(self.stream_url(kind = 'save'))
-        self.video_out = WriteGear(output_filename = output_path, logging=True)
+        self.video_out = WriteGear(output_filename = output_path, logging=True, compression_mode = False, **{'-fps': 16})
         self.do_save = True
 
     def stop_record(self):
@@ -143,7 +143,6 @@ class FrameGrabber(Process):
     def height(self):
         return config.LQ_HEIGHT
 
-
     def stream_url(self, kind):
         stream_type = 'stream1' if kind == 'save' else "stream2"
         return f"rtsp://{self.camera.user}:{self.camera.password}@{self.camera.host}:554/{stream_type}"
@@ -161,7 +160,14 @@ class Camera(Tapo):
         self.frame_buffer = Array('B', config.LQ_HEIGHT * config.LQ_WIDTH * 3)
 
         self.message_queue = multiprocessing.Queue()
-        self.grabber = FrameGrabber(camera = self, save_event = save_event, frame_buffer = self.frame_buffer, message_queue = self.message_queue)
+        self.output_queue = multiprocessing.Queue()
+        self.grabber = FrameGrabber(
+            camera = self,
+            save_event = save_event,
+            frame_buffer = self.frame_buffer,
+            message_queue = self.message_queue,
+            output_queue = self.output_queue
+        )
 
     def start_record(self, options):
         self.message_queue.put(('start_record', options))
@@ -174,6 +180,11 @@ class Camera(Tapo):
 
     def stop(self):
         self.grabber.stop()
+
+    @property
+    def last_video(self):
+        key, path = self.output_queue.get('last_video')
+        return path
 
     def grab(self):
         frame = np.frombuffer(self.frame_buffer.get_obj(), dtype = np.uint8).reshape((config.LQ_HEIGHT, config.LQ_WIDTH, 3))
