@@ -24,7 +24,7 @@ class FrameGrabber(Process):
         self.message_queue = message_queue
 
         self.video_out = None
-        self.stream_quality = 'LQ'
+        self.stream_quality = config.RECORD_QUALITY
 
         self.save_event = save_event
 
@@ -34,7 +34,8 @@ class FrameGrabber(Process):
         self.should_stop = True
 
     def run(self):
-        gear = CamGear(source = self.stream_url).start()
+        viz_gear = CamGear(source = self.stream_url(kind = 'viz')).start()
+        save_gear = CamGear(source = self.stream_url(kind = 'save')).start()
 
         while True:
 
@@ -48,7 +49,9 @@ class FrameGrabber(Process):
             if self.do_save:
                 self.save_event.wait()
 
-            frame = gear.read()
+            frame = viz_gear.read()
+            hq_frame = save_gear.read()
+
             if frame is None:
                 print("Frame is None")
                 continue
@@ -56,7 +59,7 @@ class FrameGrabber(Process):
             self.frame_buffer[:] = frame.ravel()
 
             if self.do_save:
-                self.video_out.write(frame)
+                self.video_out.write(hq_frame)
 
             if self.should_stop:
                 break
@@ -88,11 +91,11 @@ class FrameGrabber(Process):
 
     @property
     def width(self):
-        return config.HQ_WIDTH if self.stream_quality == 'HQ' else config.LQ_WIDTH
+        return config.LQ_WIDTH
 
     @property
     def height(self):
-        return config.HQ_HEIGHT if self.stream_quality == 'HQ' else config.LQ_HEIGHT
+        return config.LQ_HEIGHT
 
     def stop_record(self):
         print(self.camera.name, "STOPPING RECORDING")
@@ -100,9 +103,8 @@ class FrameGrabber(Process):
         self.video_out.close()
         self.video_out = None
 
-    @property
-    def stream_url(self):
-        stream_type = 'stream1' if self.stream_quality == 'HQ' else "stream2"
+    def stream_url(self, kind):
+        stream_type = 'stream1' if kind == 'save' else "stream2"
         return f"rtsp://{self.camera.user}:{self.camera.password}@{self.camera.host}:554/{stream_type}"
 
 class Camera(Tapo):

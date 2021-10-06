@@ -1,4 +1,5 @@
 
+RECORD_QUALITY = 'HQ'
 RECORD_PATH = './recordings'
 
 HQ_WIDTH = 1920
