@@ -101,7 +101,7 @@ class App():
 
         images = cv2.hconcat(images)
         images = cv2.cvtColor(images, cv2.COLOR_BGR2RGB)
-        images = cv2.resize(images, dsize = None, fx = 0.8, fy = 0.8)
+        images = cv2.resize(images, dsize = (int(config.LQ_WIDTH * len(self.cameras) * 0.8), int(config.LQ_HEIGHT)))
 
         self.photo = ImageTk.PhotoImage(image = Image.fromarray(images))
         self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW)

@@ -14,7 +14,7 @@ import queue
 
 class BufferLessCamGear(object):
     def __init__(self, source):
-        self.cap = CamGear(source = source).start()
+        self.cap = CamGear(source = source, CAP_PROP_BUFFERSIZE=1).start()
         self.q = queue.Queue()
         t = threading.Thread(target=self._reader)
         t.daemon = True
@@ -23,6 +23,7 @@ class BufferLessCamGear(object):
     def _reader(self):
         while True:
             frame = self.cap.read()
+            # ret, frame = self.cap.read()
             if frame is None:
                 continue
 
@@ -36,6 +37,8 @@ class BufferLessCamGear(object):
     def read(self):
         return self.q.get()
 
+    def stop(self):
+        self.cap.stop()
 
 class FrameGrabber(Process):
     def __init__(self, camera, save_event, frame_buffer, message_queue):
@@ -60,8 +63,9 @@ class FrameGrabber(Process):
         self.should_stop = True
 
     def run(self):
-        viz_gear = BufferLessCamGear(source = self.stream_url(kind = 'viz'))
-        save_gear = BufferLessCamGear(source = self.stream_url(kind = 'save'))
+        viz_gear = BufferLessCamGear(self.stream_url(kind = 'viz'))
+        # save_gear = CamGear(source = self.stream_url(kind = 'save'), CAP_PROP_BUFFERSIZE=1).start()
+        # viz_gear = CamGear(source = self.stream_url(kind = 'viz'), CAP_PROP_BUFFERSIZE=1).start()
 
         while True:
 
@@ -74,15 +78,21 @@ class FrameGrabber(Process):
 
             if self.do_save:
                 self.save_event.wait()
+                hq_frame = self.save_gear.read()
 
+            start_time = time.time()
             frame = viz_gear.read()
-            hq_frame = save_gear.read()
+            end_time = time.time()
 
             if frame is None:
                 print("Frame is None")
                 continue
 
-            self.frame_buffer[:] = frame.ravel()
+            start_time = time.time()
+            if not self.do_save or True:
+                self.frame_buffer[:] = frame.ravel()
+            end_time = time.time()
+            # print("put frame into buffer", end_time - start_time)
 
             if self.do_save:
                 self.video_out.write(hq_frame)
@@ -112,9 +122,18 @@ class FrameGrabber(Process):
             variation = options['variation'].lower().strip()
 
         output_path = os.path.join(self.recording_path, variation + '-' + str(time.time())[-6:] + '.mp4')
-
-        self.video_out = WriteGear(output_filename = output_path, logging=False)
+        self.save_gear = CamGear(self.stream_url(kind = 'save')).start()
+        # self.save_gear = BufferLessCamGear(self.stream_url(kind = 'save'))
+        self.video_out = WriteGear(output_filename = output_path, logging=True)
         self.do_save = True
+
+    def stop_record(self):
+        print(self.camera.name, "STOPPING RECORDING")
+        self.do_save = False
+        self.save_gear.stop()
+        self.save_gear = None
+        self.video_out.close()
+        self.video_out = None
 
     @property
     def width(self):
@@ -124,11 +143,6 @@ class FrameGrabber(Process):
     def height(self):
         return config.LQ_HEIGHT
 
-    def stop_record(self):
-        print(self.camera.name, "STOPPING RECORDING")
-        self.do_save = False
-        self.video_out.close()
-        self.video_out = None
 
     def stream_url(self, kind):
         stream_type = 'stream1' if kind == 'save' else "stream2"
