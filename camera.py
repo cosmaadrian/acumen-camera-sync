@@ -9,6 +9,32 @@ import time
 import numpy as np
 from multiprocessing import Process, Array
 import multiprocessing
+import threading
+import queue
+
+class BufferLessCamGear(object):
+    def __init__(self, source):
+        self.cap = CamGear(source = source).start()
+        self.q = queue.Queue()
+        t = threading.Thread(target=self._reader)
+        t.daemon = True
+        t.start()
+
+    def _reader(self):
+        while True:
+            frame = self.cap.read()
+            if frame is None:
+                continue
+
+            if not self.q.empty():
+                try:
+                    self.q.get_nowait()   # discard previous (unprocessed) frame
+                except queue.Empty:
+                    pass
+            self.q.put(frame)
+
+    def read(self):
+        return self.q.get()
 
 
 class FrameGrabber(Process):
@@ -34,8 +60,8 @@ class FrameGrabber(Process):
         self.should_stop = True
 
     def run(self):
-        viz_gear = CamGear(source = self.stream_url(kind = 'viz')).start()
-        save_gear = CamGear(source = self.stream_url(kind = 'save')).start()
+        viz_gear = BufferLessCamGear(source = self.stream_url(kind = 'viz'))
+        save_gear = BufferLessCamGear(source = self.stream_url(kind = 'save'))
 
         while True:
 
@@ -67,7 +93,8 @@ class FrameGrabber(Process):
         if self.video_out is not None:
             self.video_out.release()
 
-        gear.close()
+        viz_gear.stop()
+        save_gear.stop()
         print("Finished consuming. Exiting...")
 
     def start_record(self, options = None):
