@@ -7,6 +7,7 @@ import numpy as np
 import time
 import multiprocessing
 
+
 class App():
     def __init__(self, window, window_title, cameras):
         self.window = window
@@ -33,26 +34,34 @@ class App():
         self.window.mainloop()
 
     def init_controls(self):
+        self.messages = tkinter.Label(self.window)
+        self.messages.pack()
+
+        tkinter.Label(self.window, text="SubjectID").pack()
+        self.subject_id = tkinter.Entry(self.window)
+        self.subject_id.pack(ipady=5, pady=15, ipadx=50)
+
+        tkinter.Label(self.window, text="Variation").pack()
+        self.variation = tkinter.Entry(self.window)
+        self.variation.pack(ipady=5, pady=15, ipadx=50)
+
         self.btn_text = tkinter.StringVar()
         self.btn_text.set('START RECORD')
 
-        self.btn_record = tkinter.Button(self.window, textvariable=self.btn_text, height = 5, width=10, font = ("Helvetica", 15), command=self.record, bg='#eb1313', fg = 'White')
+        self.btn_record = tkinter.Button(self.window, textvariable=self.btn_text, height = 5, width=10, font=("Helvetica", 15), command=self.record, bg='#eb1313', activebackground='red')
         self.btn_record.pack()
 
         label = tkinter.Label(self.window, text = 'Experiment Setup')
 
-        self.is_abnormal = tkinter.IntVar()
-        c = tkinter.Checkbutton(self.window, text = "Python", variable = self.is_abnormal)
-        c.pack()
 
     def init_cameras(self):
         for c in self.cameras:
             c.start()
 
     def record(self):
-        print(self.is_abnormal.get())
         if self.is_recording:
             self.btn_text.set('START RECORD')
+            self.btn_record.configure(bg = "#eb1313", activebackground='red')
 
             for camera in self.cameras:
                 camera.stop_record()
@@ -60,9 +69,21 @@ class App():
             self.save_event.clear()
 
         else:
+            if self.subject_id.get().strip() == '':
+                print("::: SUBJECT ID NOT SET")
+                self.messages.configure(text = 'SUBJECT ID NOT SET!!!')
+                return
+            else:
+                self.messages.configure(text = '')
+
             self.btn_text.set('STOP RECORD')
+            self.btn_record.configure(bg = "#fcf403", activebackground='yellow')
+
             for camera in self.cameras:
-                camera.start_record(options = {'lol': 'lol'})
+                camera.start_record(options = {
+                    'subject_id': self.subject_id.get(),
+                    'variation': self.variation.get()
+                })
 
             self.save_event.set()
 

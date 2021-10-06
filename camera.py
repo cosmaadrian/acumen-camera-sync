@@ -53,14 +53,6 @@ class FrameGrabber(Process):
                 print("Frame is None")
                 continue
 
-            ###################################3
-            if self.camera.name == 'eye-2':
-                frame = 255 - frame
-
-            if self.camera.name == 'eye-3':
-                frame = frame - 127
-            ###################################3
-
             self.frame_buffer[:] = frame.ravel()
 
             if self.do_save:
@@ -77,9 +69,20 @@ class FrameGrabber(Process):
 
     def start_record(self, options = None):
         print(self.camera.name, "STARTING RECORDING")
+        if options is not None:
+            self.recording_path = os.path.join(config.RECORD_PATH, options['subject_id'], self.camera.name)
+        else:
+            self.recording_path = os.path.join(config.RECORD_PATH)
+
         os.makedirs(self.recording_path, exist_ok = True)
 
-        output_path = os.path.join(self.recording_path, str(time.time()).replace('.', '_') + '.mp4')
+        if options['variation'] == '':
+            variation = 'nm'
+        else:
+            variation = options['variation'].lower().strip()
+
+        output_path = os.path.join(self.recording_path, variation + '-' + str(time.time())[-6:] + '.mp4')
+
         self.video_out = WriteGear(output_filename = output_path, logging=False)
         self.do_save = True
 
