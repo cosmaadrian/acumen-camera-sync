@@ -21,8 +21,10 @@ class App():
         self.manager = multiprocessing.Manager()
         self.save_event = self.manager.Event()
         self.save_event.clear()
+        self.stop_event = self.manager.Event()
+        self.stop_event.clear()
 
-        self.cameras = [Camera(save_event = self.save_event, **config) for config in cameras]
+        self.cameras = [Camera(save_event = self.save_event, stop_event = self.stop_event, **config) for config in cameras]
 
         self.app = tkinter.Frame(window, bg="white")
         self.app.pack()
@@ -66,9 +68,9 @@ class App():
             self.btn_text.set('START RECORD')
             self.btn_record.configure(bg = "#eb1313", activebackground='red')
 
-            for camera in self.cameras:
+            for camera in self.cameras[::-1]:
                 camera.stop_record()
-
+            self.stop_event.set()
             self.save_event.clear()
 
             with open('captured_videos.txt', 'at') as f:
@@ -93,6 +95,7 @@ class App():
                 })
 
             self.save_event.set()
+            self.stop_event.clear()
 
         self.is_recording = not self.is_recording
 

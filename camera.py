@@ -40,7 +40,7 @@ class BufferLessCamGear(object):
         self.cap.stop()
 
 class FrameGrabber(Process):
-    def __init__(self, camera, save_event, frame_buffer, message_queue, output_queue):
+    def __init__(self, camera, save_event, stop_event, frame_buffer, message_queue, output_queue):
         super(FrameGrabber, self).__init__()
         self.camera = camera
 
@@ -58,6 +58,7 @@ class FrameGrabber(Process):
         self.stream_quality = config.RECORD_QUALITY
 
         self.save_event = save_event
+        self.stop_event = stop_event
 
         self.do_save = False
 
@@ -128,6 +129,7 @@ class FrameGrabber(Process):
         self.do_save = True
 
     def stop_record(self):
+        self.stop_event.wait()
         print(self.camera.name, "STOPPING RECORDING")
         self.do_save = False
         self.save_gear.stop()
@@ -148,7 +150,7 @@ class FrameGrabber(Process):
         return f"rtsp://{self.camera.user}:{self.camera.password}@{self.camera.host}:554/{stream_type}"
 
 class Camera(Tapo):
-    def __init__(self, name, host, user, password, save_event):
+    def __init__(self, name, host, user, password, save_event, stop_event):
         super().__init__(host, user, password)
         self.host = host
         self.name = name
@@ -164,6 +166,7 @@ class Camera(Tapo):
         self.grabber = FrameGrabber(
             camera = self,
             save_event = save_event,
+            stop_event = stop_event,
             frame_buffer = self.frame_buffer,
             message_queue = self.message_queue,
             output_queue = self.output_queue
