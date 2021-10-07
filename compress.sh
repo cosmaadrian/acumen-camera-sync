@@ -12,7 +12,7 @@ do
     output_file=${source_dir}/${filename}-265.${extension}
 
     ffmpeg -y -i $video -vcodec libx265 -crf 28 $output_file
+    sed -i .bak "/$filename/d" captured_videos.txt
     rm -fr $video
-    sed -i "/$filename/d" captured_videos.txt
 done
 

@@ -13,19 +13,19 @@ CAMERAS = [
         'name': 'eye-1',
         'user': 'acumen-eye-1',
         'password': "aczsc7p+tapo-1",
-        'host': "192.168.1.107"
+        'host': "192.168.42.201"
     },
     {
         'name': 'eye-2',
         'user': 'acumen-eye-2',
         'password': "aczsc7p+tapo-2",
-        'host': "192.168.1.106"
+        'host': "192.168.42.202"
     },
     {
         'name': 'eye-3',
         'user': 'acumen-eye-3',
         'password': "aczsc7p+tapo-3",
-        'host': "192.168.1.105"
+        'host': "192.168.42.203"
     }
 ]
 
