@@ -5,6 +5,7 @@ import os
 import cv2
 import time
 from collections import deque
+import sys
 import time
 import numpy as np
 from multiprocessing import Process, Array
@@ -39,6 +40,7 @@ class BufferLessCamGear(object):
     def stop(self):
         self.cap.stop()
 
+
 class FrameGrabber(Process):
     def __init__(self, camera, save_event, stop_event, frame_buffer, message_queue, output_queue):
         super(FrameGrabber, self).__init__()
@@ -55,10 +57,14 @@ class FrameGrabber(Process):
         self._last_video = ''
 
         self.video_out = None
+        self.symbol = self.camera.symbol
         self.stream_quality = config.RECORD_QUALITY
 
         self.save_event = save_event
         self.stop_event = stop_event
+        self.fps = 16
+        self.written_frames = 0
+        self.start_time = None
 
         self.do_save = False
 
@@ -95,7 +101,10 @@ class FrameGrabber(Process):
             end_time = time.time()
 
             if self.do_save:
+                print(self.symbol, end='')
+                sys.stdout.flush()
                 self.video_out.write(hq_frame)
+                self.written_frames += 1
 
             if self.should_stop:
                 break
@@ -122,20 +131,44 @@ class FrameGrabber(Process):
         else:
             variation = options['variation'].lower().strip()
 
-        output_path = os.path.join(self.recording_path, variation + '-' + str(time.time()).replace('.', '-') + '.mp4')
+        output_path = os.path.join(self.recording_path, self.camera.name + '-' + variation + '-' + str(time.time()).replace('.', '-') + '.avi')
         self.output_queue.put(('last_video', output_path))
         self.save_gear = CamGear(self.stream_url(kind = 'save')).start()
-        self.video_out = WriteGear(output_filename = output_path, logging=True, compression_mode = False, **{'-fps': 16})
+
+        ##############################
+        fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        self.video_out = cv2.VideoWriter(output_path, fourcc, self.fps, (config.HQ_WIDTH, config.HQ_HEIGHT))
+        ##############################
+
         self.do_save = True
+        self.start_time = time.time()
 
     def stop_record(self):
-        self.stop_event.wait()
+        stop_time = time.time()
+        expected_num_frames = int((stop_time - self.start_time) + 1) * self.fps
+        actual_num_frames = self.written_frames
+        difference = expected_num_frames - actual_num_frames
+
+        if difference > 0:
+            print(f"[{self.camera.name}] Saving remaining {difference} frames.")
+            while difference > 0:
+                hq_frame = self.save_gear.read()
+                self.video_out.write(hq_frame)
+                difference -= 1
+                self.written_frames += 1
+
         print(self.camera.name, "STOPPING RECORDING")
+        self.stop_event.wait()
         self.do_save = False
         self.save_gear.stop()
         self.save_gear = None
-        self.video_out.close()
+
+        print(self.camera.name, f'Written {self.written_frames} / {expected_num_frames}')
+
+        # self.video_out.close()
+        self.video_out.release()
         self.video_out = None
+        self.written_frames = 0
 
     @property
     def width(self):
@@ -150,11 +183,12 @@ class FrameGrabber(Process):
         return f"rtsp://{self.camera.user}:{self.camera.password}@{self.camera.host}:554/{stream_type}"
 
 class Camera(Tapo):
-    def __init__(self, name, host, user, password, save_event, stop_event):
+    def __init__(self, name, host, user, password, symbol, save_event, stop_event):
         super().__init__(host, user, password)
         self.host = host
         self.name = name
         self.user = user
+        self.symbol = symbol
         self.password = password
 
         self.video_out = None
