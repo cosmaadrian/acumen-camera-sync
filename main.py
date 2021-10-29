@@ -68,6 +68,7 @@ class App():
             self.btn_text.set('START RECORD')
             self.btn_record.configure(bg = "#eb1313", activebackground='red')
 
+            self.stop_event.clear()
             for camera in self.cameras[::-1]:
                 camera.stop_record()
             self.stop_event.set()
@@ -88,6 +89,7 @@ class App():
             self.btn_text.set('STOP RECORD')
             self.btn_record.configure(bg = "#fcf403", activebackground='yellow')
 
+            self.save_event.clear()
             for camera in self.cameras:
                 camera.start_record(options = {
                     'subject_id': self.subject_id.get(),
